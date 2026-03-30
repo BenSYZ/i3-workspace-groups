@@ -10,24 +10,24 @@ from i3wsgroups.log_util import logger
 
 
 class IconRule:
-
     def __init__(self, window_property, matcher, icon):
-        assert window_property in ['class', 'instance', 'title']
+        # config compatible
+        if window_property in ['class', 'instance', 'title']:
+            window_property = "window_" + window_property
+
+        assert(not window_property.startswith("_"))
+
         self.window_property = window_property
         self.matcher = re.compile(matcher)
         self.icon = icon
 
     def match(self, window: i3ipc.Con) -> Optional[str]:
-        if self.window_property == 'class':
-            property_value = window.window_class
-        elif self.window_property == 'instance':
-            property_value = window.window_instance
-        else:
-            property_value = window.window_title
-        # The value can be None for i3 placeholder windows and possibly others.
-        if property_value and self.matcher.match(property_value):
-            return self.icon
-        return None
+        property_value = getattr(window, self.window_property, None)
+        if type(property_value) not in [ int, float, str, bool ]:
+            return None
+        if self.matcher.match(str(property_value)):
+            return None
+        return self.icon
 
 
 class IconsResolver:
@@ -43,9 +43,19 @@ class IconsResolver:
             icon = rule.match(window)
             if icon is not None:
                 return icon
-        logger.info('No icon specified for window with class: "%s", instance: '
-                    '"%s", title: "%s", name: "%s"', window.window_class, window.window_instance,
-                    window.window_title, window.name)  # pyright: ignore[reportAttributeAccessIssue]
+
+        log_string=""
+        for property_name in dir(window):
+            if property_name.startswith("_"):
+                continue
+            property_value = getattr(window, property_name, None)
+            if type(property_value) not in [ int, float, str, bool ]:
+                continue
+            log_string += f'"{property_name}": "{property_value}", '
+        if log_string.endswith(", "):
+            log_string = log_string.removesuffix(", ")
+        logger.info(f'No icon specified for window with {log_string}')
+
         return self.config['default_icon']
 
     def get_workspace_icons(self, workspace: i3ipc.Con) -> str:
