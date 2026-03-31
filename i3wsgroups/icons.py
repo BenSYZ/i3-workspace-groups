@@ -13,21 +13,28 @@ class IconRule:
     def __init__(self, window_property, matcher, icon):
         # config compatible
         if window_property in ['class', 'instance', 'title']:
-            window_property = "window_" + window_property
+            window_property = "^window_" + window_property + "$"
 
-        assert(not window_property.startswith("_"))
-
-        self.window_property = window_property
-        self.matcher = re.compile(matcher)
+        self.prop_name_matcher  = re.compile(window_property)
+        self.prop_value_matcher = re.compile(matcher)
         self.icon = icon
 
     def match(self, window: i3ipc.Con) -> Optional[str]:
-        property_value = getattr(window, self.window_property, None)
-        if type(property_value) not in [ int, float, str, bool ]:
-            return None
-        if self.matcher.match(str(property_value)):
-            return None
-        return self.icon
+        for property_name in dir(window):
+            if property_name.startswith("_"):
+                continue
+            if not self.prop_name_matcher.match(property_name):
+                continue
+            property_value = getattr(window, property_name, None)
+            if type(property_value) not in [ int, float, str, bool ]:
+                continue
+            break
+        else:
+            property_value = None
+
+        if property_value and self.prop_value_matcher.match(str(property_value)):
+            return self.icon
+        return None
 
 
 class IconsResolver:
